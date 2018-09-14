@@ -5,7 +5,7 @@ Reverse engineering dell'API dell'applicazione di **Trenitalia per Android**. Il
 ## Documenti
 
 * Per informazioni dettagliate su come ho ottenuto questo materiale leggi [**il post sul mio blog**](https://blog.jacopojannone.com).
-* Per una documentazione *empirica* dell'API vedi [**la Wiki**](https://github.com/jacopo-j/TrenitaliaAPI/wiki).
+* Per una documentazione *empirica* dell'API vedi [**la Wiki**](https://github.com/jacopo-j/TrenitaliaAPI/wiki/API-dell'app-Trenitalia).
 
 ## Esempio
 
