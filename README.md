@@ -26,7 +26,7 @@ tb.search_solution(origin="830008409",       # ID della stazione di origine
                    arr_date=None,            # Data e ora di arrivo (default = None)
                    adults=1,                 # Numero di adulti (default = 1)
                    children=0,               # Numero di bambini (default = 0)
-                   train_type="All",         # Può essere "All", "Frecce", "Regional" (default = "All)
+                   train_type="All",         # Può essere "All", "Frecce", "Regional" (default = "All")
                    max_changes=99,           # Massimo numero di cambi (default = 99)
                    limit=10)                 # Massimo numero di soluzioni da cercare (default = 10)
 
