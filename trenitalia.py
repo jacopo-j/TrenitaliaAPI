@@ -306,6 +306,107 @@ class TrenitaliaBackend():
             yield output
             cur_index += 1
 
+    def solution_details(self, solution_id, adults=1, children=0):
+        p = [{'AppVersion': self.VERSION_SHORT,
+              'Credentials': None,
+              'CredentialsAlias': None,
+              'DeviceId': self._device_id,
+              'Language': 'IT',
+              'PlantId': 'android',
+              'PointOfSaleId': 3,
+              'UnitOfWork': 0},
+              {'TravelSolutionDetailsRequest':
+                    {'Body': "SolutionId": solution_id,
+                             "IsRoundTrip": False,
+                             "IsReturn": False,
+                             "CompatibleFares": None,
+                             "FidelityCardCode": None,
+                             "PostSaleCriteria": None,
+                             "EvaluateAllOfferedService": False,
+                             "Passengers": {"PassengerQuantity": [
+                                {"Type": "Adult", "Quantity": adults},
+                                {"Type": "Child", "Quantity": children}]}}}]
+        for i in range(2):
+            r = self._session.post(self.QUERY_URL,
+                                   data={"adapter": "SearchAndBuyAdapter",
+                                         "procedure": "TravelSolutionDetails",
+                                         "parameters": json.dumps(p)})
+            result = json.loads(self._cleanup(r.text))
+            if r.status_code == 200:
+                break
+            if i > 0:
+                raise AuthenticationError("Authentication attempt failed "
+                                          "after getting non 200 status code")
+            self._authenticate(result)
+        if (result["statusCode"] != 200):
+            raise Non200StatusCode("Response statusCode {}: {}".format(
+                                   result["statusCode"],
+                                   result["statusReason"]))
+        details = (result["Envelope"]["Body"]["TravelSolutionDetailsResponse"]
+                   ["Body"])
+        output = {"changes": int(solution["Changes"]),
+                  "destination":
+                      {"name": solution["DestinationStation"]["Name"],
+                       "id": solution["DestinationStation"]["Id"]},
+                  "origin":
+                      {"name": solution["OriginStation"]["Name"],
+                       "id": solution["OriginStation"]["Id"]},
+                  "duration": self._parse_time(solution["TotalJourneyTime"]),
+                  "arr_date": self._parse_date(solution["ArrivalDateTime"]),
+                  "dep_date": self._parse_date(solution["DepartureDateTime"]),
+                  "saleable": solution["IsSaleable"],
+                  "solution_id": solution["SolutionId"],
+                  "vehicles": [],
+                  "min_price": Decimal(solution["MinPrice"])
+                        if solution["MinPrice"] != self.NIL else None,
+                  "offers": []}
+
+        if isinstance(solution["Nodes"]["DetailedSolutionNode"], list):
+            for v in solution["Nodes"]["DetailedSolutionNode"]:
+                vh_data = {"dep_date": self._parse_date(
+                                        v["DepartureDateTime"]),
+                           "arr_date": self._parse_date(v["ArrivalDateTime"]),
+                           "category": (v["Train"]["CategoryCode"],
+                                        v["Train"]["CategoryName"]),
+                           "number": v["Train"]["Number"],
+                           "arr_station":
+                                {"name": v["ArrivalStation"]["Name"],
+                                 "id": v["ArrivalStation"]["Id"]},
+                           "dep_station":
+                                {"name":v["DepartureStation"]["Name"],
+                                 "id": v["DepartureStation"]["Id"]},
+                           "id": v["Id"],
+                           "duration": self._parse_time(v["JourneyDuration"]),
+                           "services": []}
+                for s in (details["Nodes"]["DetailedSolutionNode"]["Services"]
+                                 ["ServiceBase"]):
+                    if s["type"] == "Service":
+                        vh_data["services"].append({"best_price":
+                                                        s["BestPrice"],
+                                                    "id": s["Id"],
+                                                    "name": s["Name"],
+                                                    "offers": []})
+                        if isinstance(s["Offers"]["Offer"], list):
+                            for o in s["Offers"]["Offer"]:
+                                #
+                output["vehicles"].append(vh_data)
+        else:
+            v = solution["Nodes"]["SolutionNode"]
+            vh_data = {"dep_date":self._parse_date(v["DepartureDateTime"]),
+                       "arr_date": self._parse_date(v["ArrivalDateTime"]),
+                       "category": (v["Train"]["CategoryCode"],
+                                    v["Train"]["CategoryName"]),
+                       "number": v["Train"]["Number"],
+                       "arr_station": {"name": v["ArrivalStation"]["Name"],
+                                       "id": v["ArrivalStation"]["Id"]},
+                       "dep_station": {"name":v["DepartureStation"]["Name"],
+                                       "id": v["DepartureStation"]["Id"]},
+                       "id": v["Id"],
+                       "duration": self._parse_time(v["JourneyDuration"])}
+            output["vehicles"].append(vh_data)
+        yield output
+        cur_index += 1
+
     def train_info(self, number, dep_st=None, arr_st=None, dep_date=None):
         p = [{'AppVersion': self.VERSION_SHORT,
               'Credentials': None,
@@ -365,19 +466,19 @@ class TrenitaliaBackend():
                   "checkpoint_locality": chkloc,
                   "stops": []}
         for stop in data["Stops"]["RealtimeTrainStop"]:
-            if not isinstance(stop["ScheduledInfo"]["Departure"], dict):
+            if stop["ScheduledInfo"]["Departure"] != self.NIL:
                 sch_dep = self._parse_date(stop["ScheduledInfo"]["Departure"])
             else:
                 sch_dep = None
-            if not isinstance(stop["ScheduledInfo"]["Arrival"], dict):
+            if stop["ScheduledInfo"]["Arrival"] != self.NIL:
                 sch_arr = self._parse_date(stop["ScheduledInfo"]["Arrival"])
             else:
                 sch_arr = None
-            if not isinstance(stop["ActualInfo"]["Departure"], dict):
+            if stop["ActualInfo"]["Departure"] != self.NIL:
                 act_dep = self._parse_date(stop["ActualInfo"]["Departure"])
             else:
                 act_dep = None
-            if not isinstance(stop["ActualInfo"]["Arrival"], dict):
+            if stop["ActualInfo"]["Arrival"] != self.NIL:
                 act_arr = self._parse_date(stop["ActualInfo"]["Arrival"])
             else:
                 act_arr = None

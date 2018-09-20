@@ -7,6 +7,11 @@ Reverse engineering dell'API dell'applicazione di **Trenitalia per Android**. Il
 * Per informazioni dettagliate su come ho ottenuto questo materiale leggi [**il post sul mio blog**](https://blog.jacopojannone.com).
 * Per una documentazione *empirica* dell'API vedi [**la Wiki**](https://github.com/jacopo-j/TrenitaliaAPI/wiki/API-dell'app-Trenitalia).
 
+## Requisiti
+
+* Python 3.7
+* modulo `requests`
+
 ## Utilizzo
 
 ```python
@@ -15,10 +20,11 @@ from datetime import datetime
 
 tb = TrenitaliaBackend()
 
-# Ricerca di una stazione (la funzione restituisce una lista di risultati)
-tb.search_station("milano", only_italian=True)
+# Ricerca di una stazione (restituisce una lista di risultati)
+tb.search_station("milano",            # Nome da cercare
+                  only_italian=False)  # Cerca solo stazioni italiane (default = False)
 
-# Ricerca di una soluzione di viaggio (la funzione restituisce un generatore)
+# Ricerca di una soluzione di viaggio (restituisce un generatore)
 # È possibile inserire data e ora di partenza OPPURE data e ora di arrivo
 tb.search_solution(origin="830008409",       # ID della stazione di origine
                    destination="830000219",  # ID della stazione di destinazione
@@ -30,7 +36,7 @@ tb.search_solution(origin="830008409",       # ID della stazione di origine
                    max_changes=99,           # Massimo numero di cambi (default = 99)
                    limit=10)                 # Massimo numero di soluzioni da cercare (default = 10)
 
-# Info su un treno in tempo reale
+# Info su un treno in tempo reale (restituisce un dizionario)
 tb.train_info(number="9600",   # Numero del treno
               dep_st=None,     # ID della stazione di origine (opzionale)
               arr_st=None,     # ID della stazione di destinazione (opzionale)
