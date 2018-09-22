@@ -68,6 +68,9 @@ class TrainCancelledException(Exception):
 class NoSolutionsFound(Exception):
     pass
 
+class NoSeatsLeft(Exception):
+    pass
+
 
 class TrenitaliaBackend():
     VERSION = '5.0.1.0004'
@@ -144,6 +147,12 @@ class TrenitaliaBackend():
                    "Arrival": "A",
                    "Stop": "F"}
         return convert[string]
+
+    def _dict2list(self, item):
+        if isinstance(item, list):
+            return item
+        if isinstance(item, dict):
+            return [item]
 
     def search_station(self, name, only_italian=False):
         p = [{'AppVersion': self.VERSION_SHORT,
@@ -270,38 +279,23 @@ class TrenitaliaBackend():
                                 else None,
                             "min_price": Decimal(solution["MinPrice"])
                                 if solution["MinPrice"] != self.NIL else None}
-            if isinstance(solution["Nodes"]["SolutionNode"], list):
-                for v in solution["Nodes"]["SolutionNode"]:
-                    vh_data = {"dep_date": self._parse_date(
-                                            v["DepartureDateTime"]),
-                               "arr_date": self._parse_date(
-                                            v["ArrivalDateTime"]),
-                               "category": (v["Train"]["CategoryCode"],
-                                            v["Train"]["CategoryName"]),
-                               "number": v["Train"]["Number"],
-                               "arr_station":
-                                    {"name": v["ArrivalStation"]["Name"],
-                                     "id": v["ArrivalStation"]["Id"]},
-                               "dep_station":
-                                    {"name":v["DepartureStation"]["Name"],
-                                     "id": v["DepartureStation"]["Id"]},
-                               "id": v["Id"],
-                               "duration": self._parse_time(
-                                            v["JourneyDuration"])}
-                    output["vehicles"].append(vh_data)
-            else:
-                v = solution["Nodes"]["SolutionNode"]
-                vh_data = {"dep_date":self._parse_date(v["DepartureDateTime"]),
-                           "arr_date": self._parse_date(v["ArrivalDateTime"]),
+            for v in self._dict2list(solution["Nodes"]["SolutionNode"]):
+                vh_data = {"dep_date": self._parse_date(
+                                        v["DepartureDateTime"]),
+                           "arr_date": self._parse_date(
+                                        v["ArrivalDateTime"]),
                            "category": (v["Train"]["CategoryCode"],
                                         v["Train"]["CategoryName"]),
                            "number": v["Train"]["Number"],
-                           "arr_station": {"name": v["ArrivalStation"]["Name"],
-                                           "id": v["ArrivalStation"]["Id"]},
-                           "dep_station": {"name":v["DepartureStation"]["Name"],
-                                           "id": v["DepartureStation"]["Id"]},
+                           "arr_station":
+                                {"name": v["ArrivalStation"]["Name"],
+                                 "id": v["ArrivalStation"]["Id"]},
+                           "dep_station":
+                                {"name":v["DepartureStation"]["Name"],
+                                 "id": v["DepartureStation"]["Id"]},
                            "id": v["Id"],
-                           "duration": self._parse_time(v["JourneyDuration"])}
+                           "duration": self._parse_time(
+                                        v["JourneyDuration"])}
                 output["vehicles"].append(vh_data)
             yield output
             cur_index += 1
@@ -316,16 +310,16 @@ class TrenitaliaBackend():
               'PointOfSaleId': 3,
               'UnitOfWork': 0},
               {'TravelSolutionDetailsRequest':
-                    {'Body': "SolutionId": solution_id,
-                             "IsRoundTrip": False,
-                             "IsReturn": False,
-                             "CompatibleFares": None,
-                             "FidelityCardCode": None,
-                             "PostSaleCriteria": None,
-                             "EvaluateAllOfferedService": False,
-                             "Passengers": {"PassengerQuantity": [
+                    {'Body': {"SolutionId": solution_id,
+                              "IsRoundTrip": False,
+                              "IsReturn": False,
+                              "CompatibleFares": None,
+                              "FidelityCardCode": None,
+                              "PostSaleCriteria": None,
+                              "EvaluateAllOfferedService": False,
+                              "Passengers": {"PassengerQuantity": [
                                 {"Type": "Adult", "Quantity": adults},
-                                {"Type": "Child", "Quantity": children}]}}}]
+                                {"Type": "Child", "Quantity": children}]}}}}]
         for i in range(2):
             r = self._session.post(self.QUERY_URL,
                                    data={"adapter": "SearchAndBuyAdapter",
@@ -338,74 +332,87 @@ class TrenitaliaBackend():
                 raise AuthenticationError("Authentication attempt failed "
                                           "after getting non 200 status code")
             self._authenticate(result)
+        if result["statusCode"] == 500:
+            if result["statusReason"] == "Disponibilità posti insufficiente":
+                raise NoSeatsLeft()
         if (result["statusCode"] != 200):
             raise Non200StatusCode("Response statusCode {}: {}".format(
                                    result["statusCode"],
                                    result["statusReason"]))
         details = (result["Envelope"]["Body"]["TravelSolutionDetailsResponse"]
                    ["Body"])
-        output = {"changes": int(solution["Changes"]),
+        output = {"changes": int(details["Changes"]),
                   "destination":
-                      {"name": solution["DestinationStation"]["Name"],
-                       "id": solution["DestinationStation"]["Id"]},
+                      {"name": details["DestinationStation"]["Name"],
+                       "id": details["DestinationStation"]["Id"]},
                   "origin":
-                      {"name": solution["OriginStation"]["Name"],
-                       "id": solution["OriginStation"]["Id"]},
-                  "duration": self._parse_time(solution["TotalJourneyTime"]),
-                  "arr_date": self._parse_date(solution["ArrivalDateTime"]),
-                  "dep_date": self._parse_date(solution["DepartureDateTime"]),
-                  "saleable": solution["IsSaleable"],
-                  "solution_id": solution["SolutionId"],
+                      {"name": details["OriginStation"]["Name"],
+                       "id": details["OriginStation"]["Id"]},
+                  "duration": self._parse_time(details["TotalJourneyTime"]),
+                  "arr_date": self._parse_date(details["ArrivalDateTime"]),
+                  "dep_date": self._parse_date(details["DepartureDateTime"]),
+                  "saleable": details["IsSaleable"],
+                  "solution_id": details["SolutionId"],
                   "vehicles": [],
-                  "min_price": Decimal(solution["MinPrice"])
-                        if solution["MinPrice"] != self.NIL else None,
+                  "min_price": Decimal(details["MinPrice"])
+                        if details["MinPrice"] != self.NIL else None,
                   "offers": []}
 
-        if isinstance(solution["Nodes"]["DetailedSolutionNode"], list):
-            for v in solution["Nodes"]["DetailedSolutionNode"]:
-                vh_data = {"dep_date": self._parse_date(
-                                        v["DepartureDateTime"]),
-                           "arr_date": self._parse_date(v["ArrivalDateTime"]),
-                           "category": (v["Train"]["CategoryCode"],
-                                        v["Train"]["CategoryName"]),
-                           "number": v["Train"]["Number"],
-                           "arr_station":
-                                {"name": v["ArrivalStation"]["Name"],
-                                 "id": v["ArrivalStation"]["Id"]},
-                           "dep_station":
-                                {"name":v["DepartureStation"]["Name"],
-                                 "id": v["DepartureStation"]["Id"]},
-                           "id": v["Id"],
-                           "duration": self._parse_time(v["JourneyDuration"]),
-                           "services": []}
-                for s in (details["Nodes"]["DetailedSolutionNode"]["Services"]
-                                 ["ServiceBase"]):
-                    if s["type"] == "Service":
-                        vh_data["services"].append({"best_price":
-                                                        s["BestPrice"],
-                                                    "id": s["Id"],
-                                                    "name": s["Name"],
-                                                    "offers": []})
-                        if isinstance(s["Offers"]["Offer"], list):
-                            for o in s["Offers"]["Offer"]:
-                                #
-                output["vehicles"].append(vh_data)
-        else:
-            v = solution["Nodes"]["SolutionNode"]
-            vh_data = {"dep_date":self._parse_date(v["DepartureDateTime"]),
+        for v in self._dict2list(details["Nodes"]["DetailedSolutionNode"]):
+            vh_data = {"dep_date": self._parse_date(
+                                    v["DepartureDateTime"]),
                        "arr_date": self._parse_date(v["ArrivalDateTime"]),
                        "category": (v["Train"]["CategoryCode"],
                                     v["Train"]["CategoryName"]),
                        "number": v["Train"]["Number"],
-                       "arr_station": {"name": v["ArrivalStation"]["Name"],
-                                       "id": v["ArrivalStation"]["Id"]},
-                       "dep_station": {"name":v["DepartureStation"]["Name"],
-                                       "id": v["DepartureStation"]["Id"]},
+                       "arr_station":
+                            {"name": v["ArrivalStation"]["Name"],
+                             "id": v["ArrivalStation"]["Id"]},
+                       "dep_station":
+                            {"name":v["DepartureStation"]["Name"],
+                             "id": v["DepartureStation"]["Id"]},
                        "id": v["Id"],
-                       "duration": self._parse_time(v["JourneyDuration"])}
+                       "duration": self._parse_time(v["JourneyDuration"]),
+                       "services": []}
+            for s in self._dict2list(v["Services"]["ServiceBase"]):
+                if s["type"] == "Service":
+                    vh_data["services"].append({"best_price": s["BestPrice"]
+                                                       if "BestPrice" in s
+                                                       and s["BestPrice"]
+                                                           != self.NIL
+                                                       else None,
+                                                "id": s["Id"],
+                                                "name": s["Name"],
+                                                "offers": []})
+                    for o in self._dict2list(s["Offers"]["Offer"]):
+                        ofd = {"availability": o["Availability"].lower(),
+                               "best_price": o["BestPrice"],
+                               "points": Decimal(o["LoyaltyPoints"])
+                                    if "LoyaltyPoints" in o else None,
+                               "price": Decimal(o["Price"])
+                                    if o["Price"] != self.NIL else None}
+                        vh_data["services"][-1]["offers"].append(ofd)
+                elif s["type"] == "ServiceGroup":
+                    for sv in self._dict2list(s["SubServices"]["ServiceBase"]):
+                        vh_data["services"].append({"best_price":
+                                                        sv["BestPrice"]
+                                                           if "BestPrice" in sv
+                                                           and sv["BestPrice"]
+                                                               != self.NIL
+                                                           else None,
+                                                    "id": sv["Id"],
+                                                    "name": sv["Name"],
+                                                    "offers": []})
+                        for o in self._dict2list(sv["Offers"]["Offer"]):
+                            ofd = {"availability": o["Availability"].lower(),
+                                   "best_price": o["BestPrice"],
+                                   "points": Decimal(o["LoyaltyPoints"])
+                                        if "LoyaltyPoints" in o else None,
+                                   "price": Decimal(o["Price"])
+                                        if o["Price"] != self.NIL else None}
+                            vh_data["services"][-1]["offers"].append(ofd)
             output["vehicles"].append(vh_data)
-        yield output
-        cur_index += 1
+        return output
 
     def train_info(self, number, dep_st=None, arr_st=None, dep_date=None):
         p = [{'AppVersion': self.VERSION_SHORT,
@@ -507,5 +514,7 @@ class TrenitaliaBackend():
 
 
 tb = TrenitaliaBackend()
-pprint(list(tb.search_solution("830008224", "830012055", datetime(2018, 9, 15, 16, 0, 0), limit=10)))
+#pprint(list(tb.search_solution("830008224", "830012055", datetime(2018, 11, 15, 16, 0, 0), limit=1)))
+
+pprint(tb.solution_details("830001529,830008409,1809270821,510766|1311|549619,0,0,1809270815,830001529,830008409"))
 
