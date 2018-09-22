@@ -7,6 +7,8 @@ Reverse engineering dell'API dell'applicazione di **Trenitalia per Android**. Il
 * Per informazioni dettagliate su come ho ottenuto questo materiale leggi [**il post sul mio blog**](https://blog.jacopojannone.com).
 * Per una documentazione *empirica* dell'API vedi [**la Wiki**](https://github.com/jacopo-j/TrenitaliaAPI/wiki/API-dell'app-Trenitalia).
 
+Questo modulo è da considerarsi una bozza: sono stati implementati solo i metodi principali e probabilmente esistono molti casi limite che causano eccezioni non gestite. Data la complessità dei dati non è stato possibile testare ogni possibile circostanza.
+
 ## Requisiti
 
 * Python 3.7
@@ -15,7 +17,7 @@ Reverse engineering dell'API dell'applicazione di **Trenitalia per Android**. Il
 ## Utilizzo
 
 ```python
-from trenitalia import *
+from trenitalia import TrenitaliaBackend
 from datetime import datetime
 
 tb = TrenitaliaBackend()
@@ -41,6 +43,10 @@ tb.train_info(number="9600",   # Numero del treno
               dep_st=None,     # ID della stazione di origine (opzionale)
               arr_st=None,     # ID della stazione di destinazione (opzionale)
               dep_date=None)   # Data di partenza (opzionale)
+              
+# Tabellone arrivi/partenze (restituisce una lista di treni)
+tb.train_info(station="830008409",   # ID della stazione
+              ttype="departure")     # "departure" o "arrival"
 
 
 ```

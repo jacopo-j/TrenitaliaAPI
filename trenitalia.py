@@ -44,78 +44,82 @@ import time
 import re
 from datetime import datetime, timedelta
 from decimal import Decimal
-from pprint import pprint
-
-
-class AuthenticationError(Exception):
-    pass
-
-class InvalidServerResponse(Exception):
-    pass
-
-class Non200StatusCode(Exception):
-    pass
-
-class TrainNotFoundException(Exception):
-    pass
-
-class MultipleTrainsFound(Exception):
-    pass
-
-class TrainCancelledException(Exception):
-    pass
-
-class NoSolutionsFound(Exception):
-    pass
-
-class NoSeatsLeft(Exception):
-    pass
 
 
 class TrenitaliaBackend():
-    VERSION = '5.0.1.0004'
-    VERSION_SHORT = '5.0.1'
-    HOST = 'https://gw71.mplat.trenitalia.it:444/'
-    BACKEND_PATH = 'Trenitalia50/apps/services/api/Trenitalia/android/'
-    INIT_URL = f'{HOST}{BACKEND_PATH}init'
-    QUERY_URL = f'{HOST}{BACKEND_PATH}query'
+    VERSION = "5.0.1.0004"  # Versione dell'app
+    VERSION_SHORT = "5.0.1"  # Versione dell'app a 3 numeri
+    HOST = "https://gw71.mplat.trenitalia.it:444/"
+    BACKEND_PATH = "Trenitalia50/apps/services/api/Trenitalia/android/"
+    INIT_URL = f"{HOST}{BACKEND_PATH}init"
+    QUERY_URL = f"{HOST}{BACKEND_PATH}query"
     NIL = {"nil": True}
+
+    class AuthenticationError(Exception):
+        pass
+
+    class InvalidServerResponse(Exception):
+        pass
+
+    class Non200StatusCode(Exception):
+        pass
+
+    class TrainNotFound(Exception):
+        pass
+
+    class MultipleTrainsFound(Exception):
+        pass
+
+    class TrainCancelled(Exception):
+        pass
+
+    class NoSolutionsFound(Exception):
+        pass
 
     def __init__(self):
         self._session = requests.session()
-        self._session.headers.update({'x-wl-app-version': self.VERSION})
+        self._session.headers.update({"x-wl-app-version": self.VERSION})
+        # Genero un UUID univoco che identificherà questa sessione
         self._device_id = str(uuid.uuid4())
         self._authenticate()
 
     def _cleanup(self, response):
+        '''Ripulisce i file JSON restituiti dal server rimuovendo i tag
+        che li racchiudono.
+        '''
         return response.replace("/*-secure-", "").replace("*/", "")
 
     def _authenticate(self, authd=None):
+        '''Esegue l'autenticazione. Viene chiamata alla creazione
+        dell'oggetto e ogni volta che la sessione scade.
+        '''
         if authd is None:
             r = self._session.post(self.INIT_URL)
             if (r.status_code != 401):
-                raise InvalidServerResponse("Unexpected response from server "
-                                            "while starting new session")
+                raise self.InvalidServerResponse("Unexpected response from "
+                                                 "server while starting new "
+                                                 "session")
             authd = json.loads(self._cleanup(r.text))
         iid = authd["challenges"]["wl_antiXSRFRealm"]["WL-Instance-Id"]
         token = (authd["challenges"]["wl_deviceNoProvisioningRealm"]["token"])
         self._session.headers.update({"WL-Instance-Id": iid})
-        authh = {'wl_deviceNoProvisioningRealm': {'ID': {'app':
-                    {'id': 'Trenitalia', 'version': self.VERSION},
-                     'custom': {},
-                     'device': {'environment': 'android',
-                     'id': self._device_id,
-                     'model': 'unknown',
-                     'os': '7.1.0'},
-                     'token': token}}}
+        authh = {"wl_deviceNoProvisioningRealm": {"ID": {"app":
+                    {"id": "Trenitalia", "version": self.VERSION},
+                     "custom": {},
+                     "device": {"environment": "android",
+                     "id": self._device_id,
+                     "model": "unknown",
+                     "os": "7.1.0"},
+                     "token": token}}}
         r = self._session.post(self.INIT_URL,
                                headers={"Authorization": json.dumps(authh)})
         r.raise_for_status()
         result = json.loads(self._cleanup(r.text))
         if ("WL-Authentication-Success" not in result):
-            raise AuthenticationError("Authentication failed")
+            raise self.AuthenticationError("Authentication failed")
 
     def _parse_time(self, string):
+        '''Parsing delle durate in formato ISO 8601'''
         values = re.findall(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", string)[0]
         total_seconds = 0
         if values[0] != "":
@@ -127,11 +131,15 @@ class TrenitaliaBackend():
         return timedelta(seconds=total_seconds)
 
     def _parse_date(self, string, timezone=True):
+        '''Parsing delle date'''
         if timezone:
             return datetime.strptime(string, "%Y-%m-%dT%H:%M:%S%z")
         return datetime.strptime(string, "%Y-%m-%dT%H:%M:%S")
 
     def _build_date(self, date):
+        '''Costruzione di una stringa che rappresenta una data, con il
+        fuso orario corretto
+        '''
         if date is None: return None
         if date.tzinfo is None:
             tzsec = time.localtime().tm_gmtoff
@@ -142,6 +150,7 @@ class TrenitaliaBackend():
         return datetime.strftime(date, "%Y-%m-%dT%H:%M:%S") + tz
 
     def _parse_stop_type(self, string):
+        '''Parsing del tipo di fermata e conversione'''
         convert = {"Transit": "T",
                    "Departure": "P",
                    "Arrival": "A",
@@ -149,22 +158,25 @@ class TrenitaliaBackend():
         return convert[string]
 
     def _dict2list(self, item):
+        '''Converte un dizionario in una lista contenente il dizionario
+        stesso
+        '''
         if isinstance(item, list):
             return item
         if isinstance(item, dict):
             return [item]
 
     def search_station(self, name, only_italian=False):
-        p = [{'AppVersion': self.VERSION_SHORT,
-              'Credentials': None,
-              'CredentialsAlias': None,
-              'DeviceId': self._device_id,
-              'Language': 'IT',
-              'PlantId': 'android',
-              'PointOfSaleId': 3,
-              'UnitOfWork': 0},
-              {'GetStationsRequest': {'Body': {'Name': name}}},
-              {'extractOnlyItalianStations': only_italian}]
+        p = [{"AppVersion": self.VERSION_SHORT,
+              "Credentials": None,
+              "CredentialsAlias": None,
+              "DeviceId": self._device_id,
+              "Language": "IT",
+              "PlantId": "android",
+              "PointOfSaleId": 3,
+              "UnitOfWork": 0},
+              {"GetStationsRequest": {"Body": {"Name": name}}},
+              {"extractOnlyItalianStations": only_italian}]
         for i in range(2):
             r = self._session.post(self.QUERY_URL,
                                    data={"adapter": "StationsAdapter",
@@ -174,13 +186,14 @@ class TrenitaliaBackend():
             if r.status_code == 200:
                 break
             if i > 0:
-                raise AuthenticationError("Authentication attempt failed "
-                                          "after getting non 200 status code")
+                raise self.AuthenticationError("Authentication attempt failed "
+                                               "after getting non 200 status "
+                                               "code")
             self._authenticate(result)
         if (result["statusCode"] != 200):
-            raise Non200StatusCode("Response statusCode {}: {}".format(
-                                   result["statusCode"],
-                                   result["statusReason"]))
+            raise self.Non200StatusCode("Response statusCode {}: {}".format(
+                                           result["statusCode"],
+                                           result["statusReason"]))
         data = (result["Envelope"]["Body"]["GetStationsResponse"]["Body"]
                       ["StationDetail"])
         output = []
@@ -207,16 +220,16 @@ class TrenitaliaBackend():
         else:
             arrdrange = {"Start": self._build_date(arr_date), "End": None}
         while cur_index < limit:
-            p = [{'AppVersion': self.VERSION_SHORT,
-                  'Credentials': None,
-                  'CredentialsAlias': None,
-                  'DeviceId': self._device_id,
-                  'Language': 'IT',
-                  'PlantId': 'android',
-                  'PointOfSaleId': 3,
-                  'UnitOfWork': 0},
-                  {'SearchTravelsRequest':
-                        {'Body': {'PagingCriteria': {"StartIndex": cur_index,
+            p = [{"AppVersion": self.VERSION_SHORT,
+                  "Credentials": None,
+                  "CredentialsAlias": None,
+                  "DeviceId": self._device_id,
+                  "Language": "IT",
+                  "PlantId": "android",
+                  "PointOfSaleId": 3,
+                  "UnitOfWork": 0},
+                  {"SearchTravelsRequest":
+                        {"Body": {"PagingCriteria": {"StartIndex": cur_index,
                                                      "EndIndex": cur_index,
                                                      "SortDirection": None},
                                   "OriginStationId": origin,
@@ -242,19 +255,20 @@ class TrenitaliaBackend():
                 if r.status_code == 200:
                     break
                 if i > 0:
-                    raise AuthenticationError("Authentication attempt failed "
-                                              "after getting non 200 status code")
+                    raise self.AuthenticationError("Authentication attempt "
+                                                   "failed after getting non "
+                                                   "200 status code")
                 self._authenticate(result)
             if result["statusCode"] == 500:
                 if result["statusReason"].startswith("Nessuna soluzione"):
-                    raise NoSolutionsFound()
+                    raise self.NoSolutionsFound()
                 if result["statusReason"] == ("Errore restituito dal sistema "
                                               "centrale"):
                     return
             if (result["statusCode"] != 200):
-                raise Non200StatusCode("Response statusCode {}: {}".format(
-                                       result["statusCode"],
-                                       result["statusReason"]))
+                raise self.Non200StatusCode("Response statusCode {}: {}".format(
+                                           result["statusCode"],
+                                           result["statusReason"]))
             solution = (result["Envelope"]["Body"]["SearchTravelsResponse"]
                         ["Body"]["PageResult"]["TravelSolution"])
             output = {"changes": int(solution["Changes"]),
@@ -301,22 +315,22 @@ class TrenitaliaBackend():
             cur_index += 1
 
     def train_info(self, number, dep_st=None, arr_st=None, dep_date=None):
-        p = [{'AppVersion': self.VERSION_SHORT,
-              'Credentials': None,
-              'CredentialsAlias': None,
-              'DeviceId': self._device_id,
-              'Language': 'IT',
-              'PlantId': 'android',
-              'PointOfSaleId': 3,
-              'UnitOfWork': 0},
-              {'TrainRealtimeInfoRequest':
-                    {'Body': {'ArrivalStationId': arr_st,
-                              'DepartureDate': self._build_date(dep_date),
-                              'DepartureStationId': dep_st,
-                              'Train': {'CategoryCode': None,
-                                        'CategoryName': None,
-                                        'Notifiable': None,
-                                        'Number': number}}}}]
+        p = [{"AppVersion": self.VERSION_SHORT,
+              "Credentials": None,
+              "CredentialsAlias": None,
+              "DeviceId": self._device_id,
+              "Language": "IT",
+              "PlantId": "android",
+              "PointOfSaleId": 3,
+              "UnitOfWork": 0},
+              {"TrainRealtimeInfoRequest":
+                    {"Body": {"ArrivalStationId": arr_st,
+                              "DepartureDate": self._build_date(dep_date),
+                              "DepartureStationId": dep_st,
+                              "Train": {"CategoryCode": None,
+                                        "CategoryName": None,
+                                        "Notifiable": None,
+                                        "Number": number}}}}]
         for i in range(2):
             r = self._session.post(self.QUERY_URL,
                                    data={"adapter": "TrainRealtimeInfoAdapter",
@@ -326,22 +340,23 @@ class TrenitaliaBackend():
             if r.status_code == 200:
                 break
             if i > 0:
-                raise AuthenticationError("Authentication attempt failed "
-                                          "after getting non 200 status code")
+                raise self.AuthenticationError("Authentication attempt failed "
+                                               "after getting non 200 status "
+                                               "code")
             self._authenticate(result)
         if result["statusCode"] == 500:
             if result["statusReason"] == "Treno non valido":
-                raise TrainNotFoundException()
+                raise self.TrainNotFound()
             if result["statusReason"] == "Il treno e' cancellato":
-                raise TrainCancelledException()
+                raise self.TrainCancelled()
         if (result["statusCode"] != 200):
-            raise Non200StatusCode("Response statusCode {}: {}".format(
-                                   result["statusCode"],
-                                   result["statusReason"]))
+            raise self.Non200StatusCode("Response statusCode {}: {}".format(
+                                        result["statusCode"],
+                                        result["statusReason"]))
         data = (result["Envelope"]["Body"]["TrainRealtimeInfoResponse"]["Body"]
                       ["RealtimeTrainInfoWithStops"])
         if isinstance(data, list):
-            raise MultipleTrainsFound()
+            raise self.MultipleTrainsFound()
         chkpdate = self._parse_date(data["LastCheckPointTime"], timezone=False)
         if (chkpdate == datetime(1, 1, 1, 0, 0)):
             chkpdate = None
@@ -398,9 +413,49 @@ class TrenitaliaBackend():
             output["stops"].append(stopdata)
         return output
 
-
-tb = TrenitaliaBackend()
-#pprint(list(tb.search_solution("830008224", "830012055", datetime(2018, 11, 15, 16, 0, 0), limit=1)))
-
-pprint(tb.solution_details("830001529,830008409,1809270821,510766|1311|549619,0,0,1809270815,830001529,830008409"))
-
+    def timetable(self, station_id, ttype):
+        p = [{"AppVersion": self.VERSION_SHORT,
+              "Credentials": None,
+              "CredentialsAlias": None,
+              "DeviceId": self._device_id,
+              "Language": "IT",
+              "PlantId": "android",
+              "PointOfSaleId": 3,
+              "UnitOfWork": 0,
+              "StationId": station_id,
+              "Type": ttype.upper()},
+              None]
+        for i in range(2):
+            r = self._session.post(self.QUERY_URL,
+                                   data={"adapter": "GetStationTimetables",
+                                         "procedure": "getStationTables",
+                                         "parameters": json.dumps(p)})
+            result = json.loads(self._cleanup(r.text))
+            if r.status_code == 200:
+                break
+            if i > 0:
+                raise self.AuthenticationError("Authentication attempt failed "
+                                               "after getting non 200 status "
+                                               "code")
+            self._authenticate(result)
+        output = []
+        for train in result["trains"]:
+            chkpdate = self._parse_date(train["LastReachedCheckPointBase"])
+            if (chkpdate == self.NIL):
+                chkpdate = None
+            output.append({"category": (train["category"]["code"],
+                                        train["category"]["name"]),
+                           "number": train["number"],
+                           "delay": self._parse_time(train["delay"]),
+                           "checkpoint_date": chkpdate,
+                           "origin": {"id": train["originId"],
+                                      "name":  train["originName"]},
+                           "destination": {"id": train["destinationId"],
+                                           "name":  train["destinationName"]},
+                           "dep_time": train["departureTime"],
+                           "arr_time": train["arrivalTime"],
+                           "scheduled_plat": train["scheduledTrack"]
+                             if train["scheduledTrack"] != "" else None,
+                           "actual_plat": train["actualTrack"]
+                             if train["actualTrack"] != "" else None})
+        return output
