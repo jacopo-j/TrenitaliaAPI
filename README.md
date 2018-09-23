@@ -7,7 +7,7 @@ Reverse engineering dell'API dell'applicazione di **Trenitalia per Android**. Il
 * Per informazioni dettagliate su come ho ottenuto questo materiale leggi [**il post sul mio blog**](https://blog.jacopojannone.com/2018/09/24/trenitalia-app-reversed.html).
 * Per una documentazione *empirica* dell'API vedi [**la Wiki**](https://github.com/jacopo-j/TrenitaliaAPI/wiki/API-dell'app-Trenitalia).
 
-Questo modulo è da considerarsi una bozza: sono stati implementati solo i metodi principali e probabilmente esistono molti casi limite che causano eccezioni non gestite. Data la complessità dei dati non è stato possibile testare ogni possibile circostanza.
+Questo modulo è da considerarsi una bozza: sono stati implementati solo i metodi principali e probabilmente esistono molti casi limite che causano eccezioni non gestite. Data la complessità dei dati non è stato possibile testare ogni singola circostanza.
 
 ## Requisiti
 
