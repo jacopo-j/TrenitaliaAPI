@@ -23,7 +23,7 @@ from datetime import datetime
 tb = TrenitaliaBackend()
 
 # Ricerca di una stazione (restituisce una lista di risultati)
-tb.search_station("milano",            # Nome da cercare
+tb.search_station(name="milano",       # Nome da cercare
                   only_italian=False)  # Cerca solo stazioni italiane (default = False)
 
 # Ricerca di una soluzione di viaggio (restituisce un generatore)
