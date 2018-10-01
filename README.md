@@ -45,8 +45,8 @@ tb.train_info(number="9600",   # Numero del treno
               dep_date=None)   # Data di partenza (opzionale)
               
 # Tabellone arrivi/partenze (restituisce una lista di treni)
-tb.train_info(station="830008409",   # ID della stazione
-              ttype="departure")     # "departure" o "arrival"
+tb.timetable(station_id="830008409",   # ID della stazione
+             ttype="departure")        # "departure" o "arrival"
 
 
 ```
