@@ -47,8 +47,8 @@ from decimal import Decimal
 
 
 class TrenitaliaBackend():
-    VERSION = "5.0.1.0004"  # Versione dell'app
-    VERSION_SHORT = "5.0.1"  # Versione dell'app a 3 numeri
+    VERSION = "5.3.0.0015"  # Versione dell'app
+    VERSION_SHORT = "5.3.0"  # Versione dell'app a 3 numeri
     HOST = "https://gw71.mplat.trenitalia.it:444/"
     BACKEND_PATH = "Trenitalia50/apps/services/api/Trenitalia/android/"
     INIT_URL = f"{HOST}{BACKEND_PATH}init"
