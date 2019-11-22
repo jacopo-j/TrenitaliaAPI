@@ -440,8 +440,9 @@ class TrenitaliaBackend():
             self._authenticate(result)
         output = []
         for train in result["trains"]:
-            chkpdate = self._parse_date(train["LastReachedCheckPointBase"])
-            if (chkpdate == self.NIL):
+            try:
+                chkpdate = self._parse_date(train["LastReachedCheckPointBase"])
+            except TypeError:
                 chkpdate = None
             output.append({"category": (train["category"]["code"],
                                         train["category"]["name"]),
